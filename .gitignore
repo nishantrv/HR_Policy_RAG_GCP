@@ -3,3 +3,5 @@ __pycache__/
 hrrag/
 .langgraph_api/
 .deepeval/
+deploy.env.yaml
+.streamlit/secrets.toml

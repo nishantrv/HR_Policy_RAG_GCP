@@ -1,5 +1,5 @@
-"""23 · app.py — entry point: Streamlit chat UI, the full secure pipeline.
-(No login on this branch — the Google OAuth gate is added in `deployment`.)
+"""23 · app.py — entry point: Streamlit chat UI, the full secure pipeline,
+behind a Google OAuth gate when [auth] secrets are configured.
 
 Run with:  streamlit run app.py
 """
@@ -18,7 +18,7 @@ from hr_assistant.pipeline import (
 from hr_assistant.tracing import check_langsmith_tracing
 
 # Guardrail / cache telemetry (INPUT GUARDRAIL:, CACHE HIT, ...) goes
-# through logging -> the server console, not the chat UI.
+# through logging -> the server console / Cloud Run logs, not the chat UI.
 configure_logging()
 check_langsmith_tracing()  # logs once whether this run is traced
 
@@ -27,6 +27,34 @@ st.title("🤖 HR Policy Assistant")
 st.caption("Ask me anything about company HR policy — leave, WFH, notice period, and more.")
 
 from hr_assistant import config
+
+
+def _auth_configured() -> bool:
+    """True only when Streamlit's [auth] block is present (i.e. the
+    streamlit-auth secret is mounted, as it is on Cloud Run). Locally,
+    without it, we run in open mode instead of crashing on st.user."""
+    try:
+        return bool(st.secrets.get("auth"))
+    except Exception:
+        return False
+
+
+if _auth_configured():
+    if not st.user.is_logged_in:
+        st.info("Please log in with your company Google account.")
+        st.button("Log in with Google", on_click=st.login, args=("google",))
+        st.stop()
+
+    if st.user.email not in config.ALLOWED_EMPLOYEE_EMAILS:
+        st.error(f"'{st.user.email}' isn't on the approved employee list.")
+        st.button("Log out", on_click=st.logout)
+        st.stop()
+
+    st.sidebar.caption(f"Logged in as {st.user.email}")
+    st.sidebar.button("Log out", on_click=st.logout)
+else:
+    st.sidebar.warning("Open local mode — Google login is not configured.")
+
 
 st.sidebar.caption(f"🛡️ Safety guardrail: {config.GUARDRAIL_PROVIDER}")
 
